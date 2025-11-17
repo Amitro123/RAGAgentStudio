@@ -1,0 +1,24 @@
+# FastAPI & Web
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+
+# Gemini API
+google-genai==0.7.2
+
+# File Processing
+PyPDF2==3.0.1
+pdfplumber==0.10.3
+python-docx==0.8.11
+reportlab==4.0.9
+
+# Data Processing
+requests==2.31.0
+python-dotenv==1.0.0
+
+# Optional: Database
+sqlalchemy==2.0.23
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
