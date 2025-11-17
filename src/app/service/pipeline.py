@@ -49,5 +49,33 @@ class ProcessingPipeline:
             "percentage": (completed / total_steps) * 100
         }
 
+from agents.decision_agent import DecisionAgent
+from agents.rag_agent import RAGAgent
+from app.pipelines.basic_pipeline import Pipeline
+from app.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+async def rag_pipeline(initial_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Defines and executes the RAG pipeline.
+
+    Args:
+        initial_data: The initial data for the pipeline.
+
+    Returns:
+        The result of the pipeline execution.
+    """
+    decision_agent = DecisionAgent()
+    rag_agent = RAGAgent(api_key=settings.GEMINI_API_KEY)
+
+    pipeline = Pipeline(agents=[decision_agent, rag_agent])
+
+    result = await pipeline.execute(initial_input=initial_data)
+    return result
+
+
 # Global storage
 processing_pipelines: Dict[str, ProcessingPipeline] = {}

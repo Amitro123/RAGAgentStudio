@@ -4,12 +4,36 @@ RAG Agent - handles document extraction using Gemini File Search API
 import time
 import asyncio
 from typing import Dict, Any, Optional, List
-from .agent_base import BaseAgent
-from google import genai
-from google.genai import types
+from .base_agent import BaseAgent
+try:
+    from google import genai
+    from google.genai import exceptions
+except ImportError:
+    genai = None
+    exceptions = None
 import logging
+try:
+    import httpx
+except ImportError:
+    httpx = None
 
 logger = logging.getLogger(__name__)
+
+
+class GeminiApiError(Exception):
+    """Custom exception for Gemini API errors."""
+
+    pass
+
+
+async def is_internet_available():
+    """Check for internet connectivity."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://www.google.com", timeout=5)
+            return response.status_code == 200
+    except httpx.RequestError:
+        return False
 
 
 class RAGAgent(BaseAgent):
@@ -63,61 +87,41 @@ class RAGAgent(BaseAgent):
             "sufficiency_score": int
         }
         """
+        if not await is_internet_available():
+            raise GeminiApiError("No internet connection available.")
+
         try:
-            file_path = input_data.get("file_path")
-            file_name = input_data.get("file_name")
+            file_path = input_data["file_path"]
+            file_name = input_data["file_name"]
             instructions = input_data.get("instructions", "")
-            chunking_config = input_data.get("chunking_config")
-            
+
             self.log("INFO", f"Starting RAG extraction for {file_name}")
-            
-            # Step 1: Create File Search Store
+
             store_name = await self._create_file_search_store(file_name)
-            
-            # Step 2: Upload file to store
-            upload_result = await self._upload_to_store(
-                file_path, 
-                file_name, 
-                chunking_config
-            )
-            
-            if upload_result["status"] == "error":
-                raise Exception(f"Upload failed: {upload_result['message']}")
-            
-            # Step 3: Extract document metadata
+            await self._upload_to_store(file_path, file_name)
+
             metadata = await self._extract_metadata(instructions)
-            
-            # Step 4: Validate sufficiency
             sufficiency = await self._validate_sufficiency(instructions)
-            
+
             self.log("INFO", "RAG extraction completed successfully")
-            
+
             return {
                 "status": "success",
                 "agent_id": self.agent_id,
                 "data": {
                     "file_search_store": store_name,
-                    "file_search_store_full_name": self.file_search_store.name if self.file_search_store else store_name,
                     "document_metadata": metadata,
                     "extracted_info": {
                         "analysis": sufficiency["analysis"],
                         "sections": metadata.get("total_sections", 0),
-                        "key_topics": metadata.get("key_topics", [])
+                        "key_topics": metadata.get("key_topics", []),
                     },
                     "sufficiency_score": sufficiency["score"],
-                    "is_sufficient": sufficiency["is_sufficient"]
                 },
-                "message": "Document extracted and indexed successfully"
+                "message": "Document extracted and indexed successfully",
             }
-        
-        except Exception as e:
-            self.error(f"RAG extraction failed: {str(e)}", e)
-            return {
-                "status": "error",
-                "agent_id": self.agent_id,
-                "message": str(e),
-                "data": None
-            }
+        except (exceptions.GoogleAPICallError, exceptions.RetryError) as e:
+            raise GeminiApiError(f"Gemini API is currently unavailable: {e}")
     
     async def _create_file_search_store(self, store_name: str) -> str:
         """Create File Search Store"""

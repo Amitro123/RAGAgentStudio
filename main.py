@@ -1,26 +1,23 @@
-"""
-Main FastAPI server entry point for RAGAgent Studio
-"""
 import logging
-from fastapi import FastAPI
+import uuid
+import os
+import asyncio
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import router as api_router
-from app.ws.websocket import router as ws_router
 from app.config import settings
 from app.utils.logger import setup_logging
+from app.service.document_processing import process_document
+from app.service.pipeline import processing_pipelines
 
-# Setup logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI
 app = FastAPI(
     title="RAGAgent Studio",
     description="Build AI agents from PDF documents with Gemini File Search",
-    version="1.0.0"
+    version="1.0.0",
 )
 
-# Add CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,43 +26,47 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(api_router, prefix="/api/v1", tags=["API"])
-app.include_router(ws_router, tags=["WebSocket"])
+
+@app.post("/api/v1/upload-and-process")
+async def upload_and_process(
+    instructions: str = Form(...), file: UploadFile = File(...)
+):
+    task_id = str(uuid.uuid4())
+    file_path = os.path.join(settings.UPLOAD_DIR, file.filename)
+
+    with open(file_path, "wb") as buffer:
+        buffer.write(await file.read())
+
+    asyncio.create_task(
+        process_document(
+            task_id=task_id,
+            file_path=file_path,
+            instructions=instructions,
+            file_name=file.filename,
+        )
+    )
+
+    return {
+        "status": "processing_started",
+        "task_id": task_id,
+        "poll_url": f"/api/v1/status/{task_id}",
+    }
+
+
+@app.get("/api/v1/status/{task_id}")
+async def get_status(task_id: str):
+    if task_id not in processing_pipelines:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return processing_pipelines[task_id]
+
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    from datetime import datetime
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "version": "1.0.0",
-        "gemini_api": "configured" if settings.GEMINI_API_KEY else "missing"
-    }
+    return {"status": "healthy"}
 
-@app.on_event("startup")
-async def startup_event():
-    """On startup"""
-    logger.info("=" * 60)
-    logger.info("🚀 RAGAgent Studio Starting")
-    logger.info("=" * 60)
-    logger.info(f"📁 Uploads: {settings.UPLOAD_DIR}")
-    logger.info(f"🔌 MindsDB: {settings.MINDSDB_HOST}")
-    logger.info(f"📚 API Docs: http://localhost:8000/docs")
-    logger.info("=" * 60)
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """On shutdown"""
-    logger.info("🛑 RAGAgent Studio Shutting Down")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
