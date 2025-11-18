@@ -2,10 +2,19 @@ import logging
 import uuid
 import os
 import asyncio
+import sys
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from google import genai
+
+ROOT_DIR = Path(__file__).resolve().parent
+SRC_DIR = ROOT_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
 from app.config import settings
-from app.utils.logger import setup_logging
+from utils.logger import setup_logging
 from app.service.document_processing import process_document
 from app.service.pipeline import processing_pipelines
 
@@ -25,6 +34,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+@app.get("/debug/genai")
+async def debug_genai():
+    info = {
+        "genai_module": str(genai),
+        "has_Client": hasattr(genai, "Client"),
+        "executable": sys.executable,
+    }
+    try:
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        info["client_created"] = True
+    except Exception as e:
+        info["client_created"] = False
+        info["error"] = str(e)
+    return info
 
 
 @app.post("/api/v1/upload-and-process")

@@ -3,21 +3,21 @@ RAG Agent - handles document extraction using Gemini File Search API
 """
 import time
 import asyncio
+import logging
+import sys
+logger = logging.getLogger(__name__)
 from typing import Dict, Any, Optional, List
 from .base_agent import BaseAgent
 try:
     from google import genai
-    from google.genai import exceptions
-except ImportError:
+except Exception as e:
     genai = None
-    exceptions = None
-import logging
+    logger.error(f"Failed to import google-genai: {e}")
 try:
     import httpx
 except ImportError:
     httpx = None
 
-logger = logging.getLogger(__name__)
 
 
 class GeminiApiError(Exception):
@@ -50,6 +50,20 @@ class RAGAgent(BaseAgent):
     def __init__(self, api_key: str, **kwargs):
         super().__init__(**kwargs)
         self.agent_type = "rag_agent"
+
+        # DEBUG: log what the server process actually sees
+        logger.error(
+            f"[RAGAgent init] sys.executable={sys.executable}, "
+            f"genai={genai!r}, has_Client={hasattr(genai, 'Client') if genai else False}, "
+            f"api_key_present={'yes' if bool(api_key) else 'no'}"
+        )
+
+        if genai is None:
+            raise GeminiApiError(
+                "google-genai SDK is not available in this environment. "
+                "Install it with 'pip install google-genai' and make sure "
+                "you run the app from that same environment."
+            )
         self.gemini_client = genai.Client(api_key=api_key)
         self.file_search_store = None
     
@@ -120,7 +134,7 @@ class RAGAgent(BaseAgent):
                 },
                 "message": "Document extracted and indexed successfully",
             }
-        except (exceptions.GoogleAPICallError, exceptions.RetryError) as e:
+        except Exception as e:
             raise GeminiApiError(f"Gemini API is currently unavailable: {e}")
     
     async def _create_file_search_store(self, store_name: str) -> str:

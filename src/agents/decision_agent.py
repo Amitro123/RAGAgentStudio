@@ -2,7 +2,8 @@
 Decision Agent - validates inputs and decides next steps
 """
 from typing import Dict, Any, Optional
-from .agent_base import BaseAgent
+from .base_agent import BaseAgent
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,22 +26,20 @@ class DecisionAgent(BaseAgent):
     
     async def validate_input(self, input_data: Dict[str, Any]) -> bool:
         """
-        Validate input data structure
-        
-        Expected input:
+        Validate input data structure.
+
+        Expected input (flexible):
         {
             "instructions": str,
-            "file": File object or path,
-            "file_type": str (pdf, docx, txt, json)
+            "file": File object or path (optional),
+            "file_path": str (optional)
         }
         """
-        required_fields = ["instructions", "file"]
-        
-        for field in required_fields:
-            if field not in input_data:
-                self.log("WARNING", f"Missing required field: {field}")
-                return False
-        
+        # Only require instructions; file/file_path is handled in execute()
+        if "instructions" not in input_data:
+            self.log("WARNING", "Missing required field: instructions")
+            return False
+
         return True
     
     async def execute(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -88,8 +87,9 @@ class DecisionAgent(BaseAgent):
                 )
                 self.log("INFO", "Instructions validated")
             
-            # 2. Check if file exists and get type
-            file_obj = input_data.get("file")
+            # 2. Check if file exists and get type (support both 'file' and 'file_path')
+            file_obj = input_data.get("file") or input_data.get("file_path")
+
             if not file_obj:
                 decisions["messages"].append("❌ No file provided")
                 self.log("WARNING", "No file provided")

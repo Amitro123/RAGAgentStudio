@@ -91,7 +91,7 @@ class AgentConfig(BaseModel):
     file_type: FileTypeEnum
     status: AgentStatusEnum = AgentStatusEnum.PENDING
     rag_config: RAGConfig
-    model_config: ModelConfig
+    llm_config: ModelConfig
     document_metadata: Optional[DocumentMetadata] = None
     sufficiency_score: int = Field(default=0, ge=0, le=100)
     is_sufficient: bool = False
@@ -108,7 +108,7 @@ class AgentCreationRequest(BaseModel):
     instructions: str = Field(..., max_length=5000)
     file_path: str = Field(..., description="Path to uploaded file")
     file_type: FileTypeEnum
-    model_config: Optional[ModelConfig] = None
+    llm_config: Optional[ModelConfig] = None
     chunking_strategy: Optional[ChunkingStrategyEnum] = None
 
 
